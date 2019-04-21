@@ -23,9 +23,9 @@ import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.location.places.Places;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -35,19 +35,27 @@ import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.libraries.places.api.Places;
+import com.google.android.libraries.places.api.model.Place;
+import com.google.android.libraries.places.api.net.PlacesClient;
+import com.google.android.libraries.places.widget.AutocompleteFragment;
+import com.google.android.libraries.places.widget.listener.PlaceSelectionListener;
+
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
-public class MapActivity extends AppCompatActivity implements OnMapReadyCallback,
-        GoogleApiClient.OnConnectionFailedListener {
+public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
+       /* ,GoogleApiClient.OnConnectionFailedListener */{
 
+/*
     @Override
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
 
     }
-
+*/
     @Override
     public void onMapReady(GoogleMap googleMap) {
         Log.d(TAG, "OnMapReadyMap: Map is ready");
@@ -73,6 +81,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     private static final String FINE_LOCATION = Manifest.permission.ACCESS_FINE_LOCATION;
     private static final String COARSE_LOCATION = Manifest.permission.ACCESS_COARSE_LOCATION;
     private static final int LOCATION_PERMISSION_REQ_CODE = 1234;
+    private static final int AUTOCOMPLETE_REQUEST_CODE = 23487;
     private static final float DEFAULT_ZOOM = 15f;
     private static final LatLngBounds LAT_LNG_BOUNDS = new LatLngBounds(
             new LatLng(-40, -168), new LatLng(71, 136));
@@ -83,24 +92,40 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     private FusedLocationProviderClient mFusedLocationProviderClient;
     private PlaceAutocompleteAdapter mPlaceAutoCompleteAdapter;
     private GoogleApiClient mGoogleApiClient;
+    private PlacesClient placesClient;
 
     //Widgets
-    private AutoCompleteTextView mSearchText;
+    //private AutoCompleteTextView mSearchText;
     private ImageView mGps;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_map);
-        mSearchText = (AutoCompleteTextView) findViewById(R.id.input_search);
+        //mSearchText = (AutoCompleteTextView) findViewById(R.id.input_search);
         mGps = (ImageView) findViewById(R.id.ic_gps);
 
         getLocationPermission();
+        String apiKey = getString(R.string.google_maps_api_key);
+        if (apiKey.equals("")) {
+            Toast.makeText(this, "API key not set in strings", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        // Setup Places Client
+        if (!com.google.android.libraries.places.api.Places.isInitialized()) {
+            Places.initialize(getApplicationContext(), apiKey);
+        }
+
+        placesClient = Places.createClient(this);
+
+        setupAutocompleteFragment();
     }
 
     private void init() {
         Log.d(TAG, "init: initializing");
 
+/*
         mGoogleApiClient = new GoogleApiClient
                 .Builder(this)
                 .addApi(Places.GEO_DATA_API)
@@ -125,6 +150,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
                 return false;
             }
         });
+        */
 
         mGps.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -136,16 +162,43 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
         hideSoftKeyboard();
     }
 
-    private void geoLocate() {
-        Log.d(TAG, "geoLocate: geoLocating");
+    private void setupAutocompleteFragment() {
+        final AutocompleteFragment autocompleteFragment =
+                (AutocompleteFragment) getFragmentManager().findFragmentById(R.id.autocomplete_fragment);
+        autocompleteFragment.setPlaceFields(getPlaceFields());
+        autocompleteFragment.setOnPlaceSelectedListener(getPlaceSelectionListener());
+    }
 
-        String searchString = mSearchText.getText().toString();
+    @NonNull
+    private PlaceSelectionListener getPlaceSelectionListener() {
+        return new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(Place place) {
+                //responseView.setText(
+                //        StringUtil.stringifyAutocompleteWidget(place, isDisplayRawResultsChecked()));
+                geoLocate(place);
+            }
+
+            @Override
+            public void onError(Status status) {
+                //responseView.setText(status.getStatusMessage());
+                //Toast.makeText(this, "API key not set in strings", Toast.LENGTH_LONG).show();
+            }
+        };
+    }
+
+    private List<Place.Field> getPlaceFields() {
+        return Arrays.asList(Place.Field.values());
+    }
+
+    private void geoLocate(Place place) {
+        Log.d(TAG, "geoLocate: geoLocating");
 
         Geocoder geocoder = new Geocoder(MapActivity.this);
         List<Address> list = new ArrayList<>();
 
         try {
-            list = geocoder.getFromLocationName(searchString, 1);
+            list = geocoder.getFromLocation(place.getLatLng().latitude,place.getLatLng().longitude, 1);
         }
         catch (IOException e) {
             Log.e(TAG, "geoLocate: IOException: " + e.getMessage());
@@ -206,6 +259,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
 
         hideSoftKeyboard();
     }
+
     private void initMap() {
         Log.d(TAG, "initMap: initialising map");
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
@@ -255,6 +309,5 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     private void hideSoftKeyboard() {
         this.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
     }
-
 
 }
